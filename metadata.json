@@ -1,0 +1,10 @@
+{
+  "name": "كاشير المتجر",
+  "description": "تطبيق كاشير بسيط وعملي لإدارة ومبيعات المنتجات في المتجر بسرعة وسلاسة على الهاتف المحمول.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
