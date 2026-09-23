@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
-  Check,
   CreditCard,
   Banknote,
   Printer,
@@ -10,6 +9,8 @@ import {
   Sparkles,
   TrendingUp,
   Coins,
+  Boxes,
+  CheckCircle2,
 } from 'lucide-react';
 import { CartItem, SaleTransaction, formatPrice } from '../types';
 
@@ -39,6 +40,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   if (!isOpen) return null;
 
   const total = subtotal;
+  const totalItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   // Calculate total cost and total profit
   const totalCost = cartItems.reduce((sum, item) => {
@@ -121,6 +123,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </p>
               </div>
 
+              {/* Automatic Stock Decrement Notification Banner */}
+              <div className="w-full bg-[#16231c] border border-emerald-800/60 rounded-xl p-2.5 flex items-center gap-2 text-right">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="text-[11px] text-emerald-200">
+                  <span className="font-bold block">تم تحديث المخزون أوتوماتيكياً:</span>
+                  <span>تم خصم {completedSale.items.reduce((s, i) => s + i.quantity, 0)} قطعة بنجاح من أرصدة السلع.</span>
+                </div>
+              </div>
+
               {/* Receipt summary card */}
               <div className="w-full bg-[#111114] border border-[#2b2b34] rounded-xl p-3.5 text-xs text-right space-y-2 font-mono">
                 <div className="flex justify-between text-[#a1a1aa]">
@@ -179,17 +190,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
           ) : (
-            <>
+            <div>
               {/* Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-[#292931]">
+              <div className="flex items-center justify-between pb-3 border-b border-[#292932]">
                 <div>
                   <h3 className="text-base font-bold text-white">إتمام الحساب والدفع</h3>
-                  <p className="text-xs text-[#a1a1aa]">
-                    {cartItems.length} صنف • إجمالي {cartItems.reduce((s, i) => s + i.quantity, 0)} قطعة
-                  </p>
+                  <p className="text-xs text-[#a1a1aa]">{storeName || 'متجري'}</p>
                 </div>
                 <button
-                  id="close-checkout-modal"
                   onClick={onClose}
                   className="p-1 rounded-lg text-[#a1a1aa] hover:text-white hover:bg-[#25252d]"
                 >
@@ -216,6 +224,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span className="text-emerald-400 font-bold flex items-center gap-1">
                     <TrendingUp className="w-3.5 h-3.5" />
                     <span>الربح: +{formatPrice(totalProfit)} {currency} ({profitMarginPercent.toFixed(0)}%)</span>
+                  </span>
+                </div>
+
+                {/* Stock Deduction Note */}
+                <div className="pt-2 border-t border-[#292934] flex items-center justify-between text-[11px] text-[#a1a1aa]">
+                  <span className="flex items-center gap-1">
+                    <Boxes className="w-3.5 h-3.5 text-[#e5c058]" />
+                    <span>تأثير المخزون:</span>
+                  </span>
+                  <span className="text-[#f3d57e] font-mono font-semibold">
+                    سيتم خصم {totalItemCount} قطعة أوتوماتيكياً
                   </span>
                 </div>
               </div>
@@ -298,41 +317,48 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       animate={{ opacity: 1, height: 'auto' }}
                       className={`p-3 rounded-xl border flex items-center justify-between font-mono text-xs ${
                         numericCash >= total
-                          ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-200'
-                          : 'bg-red-950/30 border-red-800/40 text-red-200'
+                          ? 'bg-[#15241b] border-emerald-800/40 text-emerald-200'
+                          : 'bg-red-950/30 border-red-800/40 text-red-300'
                       }`}
                     >
-                      <span>
-                        {numericCash >= total ? 'المبلغ المتبقي للزبون:' : 'المبلغ الناقص:'}
+                      <span className="font-sans font-semibold">
+                        {numericCash >= total ? 'المتبقي (الصرف للزبون):' : 'المبلغ غير كافٍ:'}
                       </span>
-                      <span className="text-base font-black">
+                      <span className="text-sm font-black">
                         {numericCash >= total
                           ? `${formatPrice(change)} ${currency}`
-                          : `${formatPrice(total - numericCash)} ${currency}`}
+                          : `ينقص ${formatPrice(total - numericCash)} ${currency}`}
                       </span>
                     </motion.div>
                   )}
                 </div>
               )}
 
-              {/* Complete sale button */}
-              <div className="pt-4 mt-auto">
-                <motion.button
+              {/* Submit Buttons */}
+              <div className="mt-4 flex items-center gap-2">
+                <button
                   id="confirm-checkout-btn"
-                  whileTap={{ scale: 0.97 }}
                   onClick={handleFinish}
-                  disabled={paymentMethod === 'cash' && numericCash > 0 && numericCash < total}
-                  className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all ${
-                    paymentMethod === 'cash' && numericCash > 0 && numericCash < total
-                      ? 'bg-neutral-800 text-[#71717a] cursor-not-allowed border border-[#333]'
-                      : 'bg-[#e5c058] hover:bg-[#d4af37] text-neutral-950 shadow-amber-500/10'
+                  disabled={!isCashSufficient}
+                  className={`flex-1 py-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ${
+                    isCashSufficient
+                      ? 'bg-[#e5c058] hover:bg-[#d4af37] text-neutral-950 shadow-lg shadow-amber-500/10'
+                      : 'bg-[#262630] text-[#71717a] cursor-not-allowed'
                   }`}
                 >
-                  <Check className="w-5 h-5 stroke-[2.5]" />
-                  <span>تأكيد العملية وتسجيل البيع</span>
-                </motion.button>
+                  <Sparkles className="w-4 h-4 text-neutral-950" />
+                  <span>تأكيد البيع وخصم المخزون</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="py-3 px-4 rounded-xl bg-[#22222a] border border-[#383842] text-[#d4d4d8] text-xs font-semibold"
+                >
+                  إلغاء
+                </button>
               </div>
-            </>
+            </div>
           )}
         </motion.div>
       </div>

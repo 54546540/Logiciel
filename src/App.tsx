@@ -8,7 +8,7 @@ import { ProductFormModal } from './components/ProductFormModal';
 import { QuickPriceModal } from './components/QuickPriceModal';
 import { CheckoutModal } from './components/CheckoutModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
-import { Product, CartItem, SaleTransaction, formatPrice } from './types';
+import { Product, CartItem, SaleTransaction } from './types';
 import {
   getStoredProducts,
   saveStoredProducts,
@@ -16,7 +16,7 @@ import {
   saveStoredSales,
   getStoreConfig,
 } from './utils/storage';
-import { CheckCircle2, Barcode } from 'lucide-react';
+import { CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'cashier' | 'products' | 'sales'>('cashier');
@@ -36,8 +36,9 @@ export const App: React.FC = () => {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
 
-  // Quick toast message for barcode scans / douchette
+  // Quick toast message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'info' | 'warning'>('info');
 
   // Initialize data
   useEffect(() => {
@@ -54,15 +55,18 @@ export const App: React.FC = () => {
   };
 
   // Show a temporary banner toast
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, type: 'info' | 'warning' = 'info') => {
     setToastMessage(msg);
+    setToastType(type);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2800);
+    }, 3000);
   };
 
   // Cart operations
   const handleAddToCart = (product: Product) => {
+    const currentStock = product.stock !== undefined ? product.stock : 20;
+
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -74,7 +78,14 @@ export const App: React.FC = () => {
       }
       return [...prev, { product, quantity: 1 }];
     });
-    showToast(`تمت إضافة "${product.name}" إلى السلة`);
+
+    if (currentStock <= 0) {
+      showToast(`تنبيه: مخزون "${product.name}" منتهي (0 قطعة)`, 'warning');
+    } else if (currentStock <= 3) {
+      showToast(`مخزون منخفض: متبقي ${currentStock} فقط من "${product.name}"`, 'warning');
+    } else {
+      showToast(`تمت إضافة "${product.name}" إلى السلة`);
+    }
   };
 
   const handleUpdateCartQuantity = (productId: string, quantity: number) => {
@@ -126,7 +137,7 @@ export const App: React.FC = () => {
             : item
         )
       );
-      showToast(`تم تحديث بيانات "${productData.name}"`);
+      showToast(`تم تحديث بيانات "${productData.name}" والمخزون`);
     } else {
       // Adding new product
       const newProd: Product = {
@@ -136,7 +147,7 @@ export const App: React.FC = () => {
       };
       const updated = [newProd, ...products];
       updateProductsState(updated);
-      showToast(`تمت إضافة "${newProd.name}" إلى قائمة المنتجات`);
+      showToast(`تمت إضافة "${newProd.name}" برصيد ${newProd.stock ?? 0} قطعة للمخزون`);
     }
     setEditingProduct(null);
     setPrefilledBarcode('');
@@ -149,10 +160,44 @@ export const App: React.FC = () => {
     showToast('تم حذف السلعة من المتجر');
   };
 
+  // Dedicated Stock Updater (from ProductsTab)
+  const handleUpdateStock = (productId: string, newStock: number) => {
+    const target = products.find((p) => p.id === productId);
+    const updated = products.map((p) =>
+      p.id === productId
+        ? {
+            ...p,
+            stock: Math.max(0, newStock),
+            updatedAt: Date.now(),
+          }
+        : p
+    );
+    updateProductsState(updated);
+
+    // Update cart product snapshot as well
+    setCart((prev) =>
+      prev.map((item) =>
+        item.product.id === productId
+          ? {
+              ...item,
+              product: {
+                ...item.product,
+                stock: Math.max(0, newStock),
+              },
+            }
+          : item
+      )
+    );
+
+    showToast(`تم تحديث مخزون "${target?.name || ''}" إلى ${newStock} قطعة`);
+  };
+
+  // Price & Cost & Stock Updater (from QuickPriceModal & inline edits)
   const handleUpdatePrice = (
     productId: string,
     newPrice: number,
-    newCostPrice?: number
+    newCostPrice?: number,
+    newStock?: number
   ) => {
     const updated = products.map((p) =>
       p.id === productId
@@ -160,6 +205,7 @@ export const App: React.FC = () => {
             ...p,
             price: newPrice,
             costPrice: newCostPrice !== undefined ? newCostPrice : p.costPrice,
+            stock: newStock !== undefined ? Math.max(0, newStock) : p.stock,
             updatedAt: Date.now(),
           }
         : p
@@ -177,21 +223,52 @@ export const App: React.FC = () => {
                 price: newPrice,
                 costPrice:
                   newCostPrice !== undefined ? newCostPrice : item.product.costPrice,
+                stock: newStock !== undefined ? Math.max(0, newStock) : item.product.stock,
               },
               customPrice: undefined,
             }
           : item
       )
     );
-    showToast('تم حفظ السعر والربح الجديد بنجاح');
+    showToast('تم حفظ التعديلات بنجاح');
   };
 
-  // Checkout
+  // Checkout & Automated Stock Decrement
   const handleCompleteSale = (newSale: SaleTransaction) => {
+    // 1. Decrement stock for all sold items automatically
+    const updatedProducts = products.map((prod) => {
+      const soldItem = newSale.items.find((item) => item.product.id === prod.id);
+      if (soldItem) {
+        const currentStock = prod.stock !== undefined ? prod.stock : 20;
+        const newStock = Math.max(0, currentStock - soldItem.quantity);
+        return {
+          ...prod,
+          stock: newStock,
+          updatedAt: Date.now(),
+        };
+      }
+      return prod;
+    });
+
+    updateProductsState(updatedProducts);
+
+    // 2. Persist sales history
     const updatedSales = [newSale, ...sales];
     setSales(updatedSales);
     saveStoredSales(updatedSales);
     setCart([]);
+
+    // Check for any newly depleted stock to alert user
+    const depleted = updatedProducts.filter((p) => {
+      const sold = newSale.items.some((it) => it.product.id === p.id);
+      return sold && (p.stock ?? 0) <= 0;
+    });
+
+    if (depleted.length > 0) {
+      showToast(`تم البيع • تنبيه: نفذ مخزون "${depleted[0].name}"`, 'warning');
+    } else {
+      showToast('تمت عملية البيع بنجاح وخصم المخزون أوتوماتيكياً');
+    }
   };
 
   // Calculate cart total for checkout
@@ -201,13 +278,11 @@ export const App: React.FC = () => {
   }, 0);
 
   // Hardware Barcode Scanner (Douchette) Global Detection
-  // Scanners fire keys in extremely rapid succession (<50ms) followed by 'Enter'
   const barcodeBufferRef = useRef<string>('');
   const lastKeyTimeRef = useRef<number>(0);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // If user is actively typing in a normal input/textarea, ignore unless enter with long buffer
       const target = e.target as HTMLElement;
       const isInput =
         target.tagName === 'INPUT' ||
@@ -223,7 +298,6 @@ export const App: React.FC = () => {
         barcodeBufferRef.current = '';
 
         if (scanned.length >= 3) {
-          // Look for product matching barcode or id
           const match = products.find(
             (p) =>
               (p.barcode && p.barcode.toLowerCase() === scanned.toLowerCase()) ||
@@ -234,14 +308,12 @@ export const App: React.FC = () => {
             handleAddToCart(match);
             e.preventDefault();
           } else if (!isInput) {
-            // Not in an input field, ask to add
-            showToast(`كود الباركود [${scanned}] غير مسجل`);
+            showToast(`كود الباركود [${scanned}] غير مسجل`, 'warning');
           }
         }
         return;
       }
 
-      // If keys come within 60ms of each other, it's a hardware scanner stream
       if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (elapsed > 70) {
           barcodeBufferRef.current = e.key;
@@ -274,9 +346,17 @@ export const App: React.FC = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-[#1e1d16] border border-[#e5c058]/80 text-[#f3d57e] px-4 py-2 rounded-xl shadow-2xl text-xs font-bold flex items-center gap-2 backdrop-blur-md"
+            className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl shadow-2xl text-xs font-bold flex items-center gap-2 backdrop-blur-md border ${
+              toastType === 'warning'
+                ? 'bg-[#241717] border-rose-500/80 text-rose-300'
+                : 'bg-[#1e1d16] border-[#e5c058]/80 text-[#f3d57e]'
+            }`}
           >
-            <CheckCircle2 className="w-4 h-4 text-[#e5c058]" />
+            {toastType === 'warning' ? (
+              <AlertTriangle className="w-4 h-4 text-rose-400" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-[#e5c058]" />
+            )}
             <span>{toastMessage}</span>
           </motion.div>
         )}
@@ -339,7 +419,8 @@ export const App: React.FC = () => {
                   setIsProductModalOpen(true);
                 }}
                 onDeleteProduct={handleDeleteProduct}
-                onUpdatePrice={handleUpdatePrice}
+                onUpdatePrice={(id, price) => handleUpdatePrice(id, price)}
+                onUpdateStock={handleUpdateStock}
               />
             </motion.div>
           )}
@@ -380,7 +461,7 @@ export const App: React.FC = () => {
         }}
       />
 
-      {/* Quick Price Editor Modal */}
+      {/* Quick Price & Stock Editor Modal */}
       <QuickPriceModal
         isOpen={isQuickPriceModalOpen}
         onClose={() => {

@@ -3,6 +3,7 @@ export interface Product {
   name: string;
   price: number; // سعر البيع للزبون (إعادة البيع)
   costPrice?: number; // سعر الشراء / التكلفة الأصلية بالجملة
+  stock?: number; // كمية المخزون المتاحة حالياً
   category?: string;
   barcode?: string;
   updatedAt?: number;
@@ -49,4 +50,43 @@ export function calculateItemProfit(price: number, costPrice?: number): {
   const profit = price - cost;
   const marginPercent = price > 0 ? (profit / price) * 100 : 0;
   return { profit, marginPercent };
+}
+
+// Stock status helper
+export function getStockStatus(stock?: number): {
+  status: 'in_stock' | 'low_stock' | 'out_of_stock';
+  label: string;
+  shortLabel: string;
+  badgeClass: string;
+} {
+  if (stock === undefined || stock === null) {
+    return {
+      status: 'in_stock',
+      label: 'متوفر',
+      shortLabel: 'متوفر',
+      badgeClass: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/40',
+    };
+  }
+  if (stock <= 0) {
+    return {
+      status: 'out_of_stock',
+      label: 'نفذ من المخزون',
+      shortLabel: 'نفذ 0',
+      badgeClass: 'text-rose-400 bg-rose-950/60 border-rose-800/60',
+    };
+  }
+  if (stock <= 5) {
+    return {
+      status: 'low_stock',
+      label: `متبقي ${stock} فقط (قليل)`,
+      shortLabel: `${stock} متبقي`,
+      badgeClass: 'text-amber-400 bg-amber-950/60 border-amber-800/60',
+    };
+  }
+  return {
+    status: 'in_stock',
+    label: `${stock} في المخزون`,
+    shortLabel: `${stock} متوفر`,
+    badgeClass: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/40',
+  };
 }

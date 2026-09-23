@@ -15,11 +15,11 @@ import {
   ChevronDown,
   ChevronUp,
   Barcode,
-  Camera,
   TrendingUp,
-  Coins,
+  Boxes,
+  AlertCircle,
 } from 'lucide-react';
-import { Product, CartItem, formatPrice, calculateItemProfit } from '../types';
+import { Product, CartItem, formatPrice, calculateItemProfit, getStockStatus } from '../types';
 
 interface CashierTabProps {
   products: Product[];
@@ -104,8 +104,6 @@ export const CashierTab: React.FC<CashierTabProps> = ({
   }, 0);
 
   const totalCartProfit = Math.max(0, totalCartAmount - totalCartCost);
-  const totalCartMargin =
-    totalCartAmount > 0 ? (totalCartProfit / totalCartAmount) * 100 : 0;
 
   const handleSaveCartItemPrice = (productId: string) => {
     const val = parseFloat(tempCartPrice);
@@ -184,22 +182,27 @@ export const CashierTab: React.FC<CashierTabProps> = ({
                 <span className="text-sm font-bold text-white leading-tight">
                   {searchDirectMatch.name}
                 </span>
-                <span className="text-[10px] text-emerald-400 font-mono mt-0.5 block">
-                  ربح: +
-                  {formatPrice(
-                    searchDirectMatch.price -
-                      (searchDirectMatch.costPrice ??
-                        Math.round(searchDirectMatch.price * 0.7))
-                  )}{' '}
-                  {currency}
-                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] text-emerald-400 font-mono font-semibold">
+                    ربح: +
+                    {formatPrice(
+                      searchDirectMatch.price -
+                        (searchDirectMatch.costPrice ??
+                          Math.round(searchDirectMatch.price * 0.7))
+                    )}{' '}
+                    {currency}
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono border ${getStockStatus(searchDirectMatch.stock).badgeClass}`}>
+                    {getStockStatus(searchDirectMatch.stock).label}
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onOpenQuickPriceEdit(searchDirectMatch)}
-                title="تعديل السعر"
+                title="تعديل السعر والمخزون"
                 className="flex items-center gap-1 bg-[#252530] hover:bg-[#2e2e3a] border border-[#3e3e4c] text-xs px-2.5 py-1.5 rounded-lg text-[#f3d57e] font-mono font-bold transition-colors"
               >
                 <span>{formatPrice(searchDirectMatch.price)} {currency}</span>
@@ -246,7 +249,7 @@ export const CashierTab: React.FC<CashierTabProps> = ({
               لا توجد سلع أو منتجات مطابقة لـ "{searchQuery}"
             </p>
             <p className="text-xs text-[#71717a] mt-1 mb-4">
-              يمكنك كتابة اسم المنتج وتحديد سعر شرائه وسعر بيعه بحرية
+              يمكنك كتابة اسم المنتج وتحديد سعر شرائه وسعر بيعه وكمية المخزون
             </p>
             <motion.button
               whileTap={{ scale: 0.95 }}
@@ -265,7 +268,10 @@ export const CashierTab: React.FC<CashierTabProps> = ({
                 product.costPrice !== undefined
                   ? product.costPrice
                   : Math.round(product.price * 0.7);
-              const { profit, marginPercent } = calculateItemProfit(product.price, cost);
+              const { profit } = calculateItemProfit(product.price, cost);
+              const currentStock = product.stock !== undefined ? product.stock : 20;
+              const stockInfo = getStockStatus(currentStock);
+              const isOutOfStock = currentStock <= 0;
 
               return (
                 <motion.div
@@ -274,25 +280,37 @@ export const CashierTab: React.FC<CashierTabProps> = ({
                   className={`group relative bg-[#17171d] hover:bg-[#1c1c23] border rounded-xl p-3 flex flex-col justify-between transition-all select-none ${
                     inCartItem
                       ? 'border-[#e5c058]/80 shadow-md shadow-amber-500/5'
+                      : isOutOfStock
+                      ? 'border-rose-950/60 bg-[#161214]'
                       : 'border-[#2a2a32] hover:border-[#3e3e4c]'
                   }`}
                 >
-                  {/* Card Header & Category */}
+                  {/* Card Header: Category, Edit and Live Stock Badge */}
                   <div>
                     <div className="flex items-start justify-between gap-1 mb-1">
-                      <span className="text-[10px] text-[#8e8e93] font-medium truncate max-w-[85px]">
+                      <span className="text-[10px] text-[#8e8e93] font-medium truncate max-w-[75px]">
                         {product.category || 'عام'}
                       </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenQuickPriceEdit(product);
-                        }}
-                        title="تعديل السعر بحرية"
-                        className="opacity-70 hover:opacity-100 p-1 -m-1 text-[#a1a1aa] hover:text-[#f3d57e]"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {/* Stock Badge */}
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border ${stockInfo.badgeClass}`}
+                          title={`الكمية المتوفرة في المخزون: ${currentStock}`}
+                        >
+                          {stockInfo.shortLabel}
+                        </span>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenQuickPriceEdit(product);
+                          }}
+                          title="تعديل السعر والمخزون"
+                          className="opacity-70 hover:opacity-100 p-1 -m-1 text-[#a1a1aa] hover:text-[#f3d57e]"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Product Name */}
@@ -347,10 +365,17 @@ export const CashierTab: React.FC<CashierTabProps> = ({
                       <motion.button
                         whileTap={{ scale: 0.9 }}
                         onClick={() => onAddToCart(product)}
-                        className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-[#24242e] hover:bg-[#e5c058] border border-[#393946] hover:border-[#e5c058] text-[#f3d57e] hover:text-neutral-950 font-bold text-xs flex items-center gap-1 transition-all"
+                        className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border font-bold text-xs flex items-center gap-1 transition-all ${
+                          isOutOfStock
+                            ? 'bg-[#201618] hover:bg-rose-900/40 border-rose-800/60 text-rose-300'
+                            : 'bg-[#24242e] hover:bg-[#e5c058] border-[#393946] hover:border-[#e5c058] text-[#f3d57e] hover:text-neutral-950'
+                        }`}
+                        title={isOutOfStock ? 'نفذ المخزون - انقر للإضافة مع التنبيه' : 'إضافة إلى السلة'}
                       >
                         <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <span className="hidden sm:inline">إضافة</span>
+                        <span className="hidden sm:inline">
+                          {isOutOfStock ? 'نفذ (0)' : 'إضافة'}
+                        </span>
                       </motion.button>
                     )}
                   </div>
@@ -410,6 +435,8 @@ export const CashierTab: React.FC<CashierTabProps> = ({
                         Math.round(item.product.price * 0.7);
                       const itemProfit = (effectivePrice - cost) * item.quantity;
                       const isEditingPrice = editingCartItemPriceId === item.product.id;
+                      const currentStock = item.product.stock !== undefined ? item.product.stock : 20;
+                      const remainingAfterSale = currentStock - item.quantity;
 
                       return (
                         <div
@@ -417,9 +444,23 @@ export const CashierTab: React.FC<CashierTabProps> = ({
                           className="pt-1.5 flex items-center justify-between text-xs gap-2"
                         >
                           <div className="flex-1 min-w-0">
-                            <span className="font-semibold text-white block truncate">
-                              {item.product.name}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-white truncate">
+                                {item.product.name}
+                              </span>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${
+                                  remainingAfterSale < 0
+                                    ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                                    : 'bg-[#1e1e26] text-[#a1a1aa]'
+                                }`}
+                              >
+                                {remainingAfterSale < 0
+                                  ? `يتجاوز المخزون بـ ${Math.abs(remainingAfterSale)}`
+                                  : `المتبقي بعد البيع: ${remainingAfterSale}`}
+                              </span>
+                            </div>
+
                             <div className="flex items-center gap-2 mt-0.5">
                               {isEditingPrice ? (
                                 <div className="flex items-center gap-1">

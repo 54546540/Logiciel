@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Check, Edit3, TrendingUp, AlertTriangle } from 'lucide-react';
-import { Product, formatPrice, calculateItemProfit } from '../types';
+import { X, Check, Edit3, TrendingUp, AlertTriangle, Boxes, Plus, Minus } from 'lucide-react';
+import { Product, formatPrice, calculateItemProfit, getStockStatus } from '../types';
 
 interface QuickPriceModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: Product | null;
-  onUpdatePrice: (productId: string, newPrice: number, newCostPrice?: number) => void;
+  onUpdatePrice: (
+    productId: string,
+    newPrice: number,
+    newCostPrice?: number,
+    newStock?: number
+  ) => void;
   currency: string;
 }
 
@@ -20,7 +25,9 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
 }) => {
   const [price, setPrice] = useState('');
   const [costPrice, setCostPrice] = useState('');
+  const [stock, setStock] = useState('0');
   const [showCostEdit, setShowCostEdit] = useState(false);
+  const [showStockEdit, setShowStockEdit] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -31,11 +38,16 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
           ? product.costPrice.toString()
           : Math.round(product.price * 0.7).toString()
       );
+      setStock(
+        product.stock !== undefined ? product.stock.toString() : '20'
+      );
     } else {
       setPrice('');
       setCostPrice('');
+      setStock('0');
     }
     setShowCostEdit(false);
+    setShowStockEdit(false);
     setError('');
   }, [product, isOpen]);
 
@@ -43,6 +55,10 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
 
   const parsedPrice = parseFloat(price) || 0;
   const parsedCost = parseFloat(costPrice) || 0;
+  const parsedStock = parseInt(stock, 10);
+  const currentStockVal = !isNaN(parsedStock) ? parsedStock : 0;
+  const stockInfo = getStockStatus(currentStockVal);
+
   const { profit, marginPercent } = calculateItemProfit(parsedPrice, parsedCost);
   const isLoss = parsedCost > parsedPrice && parsedPrice > 0;
 
@@ -54,10 +70,13 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
       return;
     }
     const finalCost = parseFloat(costPrice);
+    const finalStock = parseInt(stock, 10);
+
     onUpdatePrice(
       product.id,
       finalPrice,
-      !isNaN(finalCost) && finalCost >= 0 ? finalCost : undefined
+      !isNaN(finalCost) && finalCost >= 0 ? finalCost : undefined,
+      !isNaN(finalStock) && finalStock >= 0 ? finalStock : undefined
     );
     onClose();
   };
@@ -69,6 +88,11 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
     setError('');
   };
 
+  const adjustStock = (amount: number) => {
+    const current = parseInt(stock, 10) || 0;
+    setStock(Math.max(0, current + amount).toString());
+  };
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
@@ -76,7 +100,7 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
           initial={{ opacity: 0, scale: 0.94, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 8 }}
-          className="relative w-full max-w-sm bg-[#16161b] border border-[#2e2e36] rounded-2xl p-4 sm:p-5 shadow-2xl text-white"
+          className="relative w-full max-w-sm bg-[#16161b] border border-[#2e2e36] rounded-2xl p-4 sm:p-5 shadow-2xl text-white max-h-[92vh] overflow-y-auto"
         >
           <div className="flex items-center justify-between pb-3 border-b border-[#2a2a30]">
             <div className="flex items-center gap-2">
@@ -84,7 +108,7 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
                 <Edit3 className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-white">تعديل السعر والربح</h3>
+                <h3 className="text-sm font-bold text-white">تعديل السعر والمخزون</h3>
                 <p className="text-xs text-[#a1a1aa] truncate max-w-[200px]">
                   {product.name}
                 </p>
@@ -99,12 +123,13 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
           </div>
 
           <form onSubmit={handleSubmit} className="mt-3.5 space-y-3">
+            {/* Price Input */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-xs font-semibold text-[#d4d4d8]">
                   سعر إعادة البيع ({currency})
                 </label>
-                <span className="text-[11px] text-[#e5c058]">قابل للتعديل بحرية</span>
+                <span className="text-[11px] text-[#e5c058]">تعديل فوري</span>
               </div>
               <div className="relative">
                 <input
@@ -187,9 +212,55 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
               </motion.div>
             )}
 
-            {/* Quick +/- buttons adapted for Algerian Dinar denominations */}
+            {/* Stock Quantity Card in Quick Edit */}
+            <div className="bg-[#181820] border border-[#2e2e3b] rounded-xl p-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Boxes className="w-3.5 h-3.5 text-[#e5c058]" />
+                  <span className="text-xs font-bold text-white">المخزون المتوفر:</span>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold border ${stockInfo.badgeClass}`}>
+                  {stockInfo.label}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => adjustStock(-1)}
+                  className="p-1.5 rounded-lg bg-[#22222a] border border-[#373744] text-[#d4d4d8] hover:text-white"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={stock}
+                  onChange={(e) => setStock(e.target.value)}
+                  className="flex-1 py-1 px-2 bg-[#121216] border border-[#383846] rounded-lg text-center font-mono font-bold text-white text-sm focus:outline-none focus:border-[#e5c058]"
+                />
+                <button
+                  type="button"
+                  onClick={() => adjustStock(1)}
+                  className="p-1.5 rounded-lg bg-[#22222a] border border-[#373744] text-[#d4d4d8] hover:text-white"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => adjustStock(10)}
+                  className="px-2 py-1 rounded-lg bg-[#252532] border border-[#3e3e50] text-[#f3d57e] font-mono text-xs font-bold hover:bg-[#313142]"
+                  title="إضافة 10 قطع"
+                >
+                  +10
+                </button>
+              </div>
+            </div>
+
+            {/* Quick +/- buttons */}
             <div>
-              <p className="text-[11px] text-[#71717a] mb-1.5 text-center">أزرار التعديل السريع:</p>
+              <p className="text-[11px] text-[#71717a] mb-1.5 text-center">أزرار تعديل السعر السريعة:</p>
               <div className="grid grid-cols-4 gap-1.5">
                 <button
                   type="button"
@@ -220,36 +291,6 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
                   +100
                 </button>
               </div>
-              <div className="grid grid-cols-4 gap-1.5 mt-1.5">
-                <button
-                  type="button"
-                  onClick={() => adjustPrice(-500)}
-                  className="py-1.5 rounded-lg bg-[#22222a] border border-[#383842] text-xs font-bold text-[#d4d4d8] hover:border-[#e5c058] hover:text-white"
-                >
-                  -500
-                </button>
-                <button
-                  type="button"
-                  onClick={() => adjustPrice(-10)}
-                  className="py-1.5 rounded-lg bg-[#22222a] border border-[#383842] text-xs font-bold text-[#d4d4d8] hover:border-[#e5c058] hover:text-white"
-                >
-                  -10
-                </button>
-                <button
-                  type="button"
-                  onClick={() => adjustPrice(10)}
-                  className="py-1.5 rounded-lg bg-[#22222a] border border-[#383842] text-xs font-bold text-[#d4d4d8] hover:border-[#e5c058] hover:text-white"
-                >
-                  +10
-                </button>
-                <button
-                  type="button"
-                  onClick={() => adjustPrice(500)}
-                  className="py-1.5 rounded-lg bg-[#22222a] border border-[#383842] text-xs font-bold text-[#d4d4d8] hover:border-[#e5c058] hover:text-white"
-                >
-                  +500
-                </button>
-              </div>
             </div>
 
             {error && (
@@ -264,7 +305,7 @@ export const QuickPriceModal: React.FC<QuickPriceModalProps> = ({
                 className="flex-1 py-2.5 rounded-xl bg-[#e5c058] hover:bg-[#d4af37] text-neutral-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>حفظ السعر</span>
+                <span>حفظ التعديلات</span>
               </motion.button>
               <motion.button
                 type="button"

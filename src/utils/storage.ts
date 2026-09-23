@@ -1,10 +1,10 @@
 import { Product, SaleTransaction } from '../types';
 import { INITIAL_PRODUCTS, DEFAULT_CURRENCY } from '../data/initialProducts';
 
-const PRODUCTS_KEY = 'cashier_products_dz_v3';
-const LEGACY_PRODUCTS_KEY = 'cashier_products_dz_v2';
-const SALES_KEY = 'cashier_sales_dz_v3';
-const LEGACY_SALES_KEY = 'cashier_sales_dz_v2';
+const PRODUCTS_KEY = 'cashier_products_dz_v4';
+const LEGACY_PRODUCTS_KEY = 'cashier_products_dz_v3';
+const SALES_KEY = 'cashier_sales_dz_v4';
+const LEGACY_SALES_KEY = 'cashier_sales_dz_v3';
 const STORE_NAME_KEY = 'cashier_store_name_dz_v2';
 const CURRENCY_KEY = 'cashier_currency_dz_v2';
 
@@ -12,7 +12,6 @@ export function getStoredProducts(): Product[] {
   try {
     let data = localStorage.getItem(PRODUCTS_KEY);
     if (!data) {
-      // Check legacy v2
       data = localStorage.getItem(LEGACY_PRODUCTS_KEY);
     }
 
@@ -26,7 +25,7 @@ export function getStoredProducts(): Product[] {
       return INITIAL_PRODUCTS;
     }
 
-    // Ensure all products have costPrice for profit calculation
+    // Ensure all products have costPrice and stock
     const initialMap = new Map(INITIAL_PRODUCTS.map((p) => [p.id, p]));
     const migrated = parsed.map((p) => {
       let cost = p.costPrice;
@@ -35,11 +34,21 @@ export function getStoredProducts(): Product[] {
         if (foundInitial && foundInitial.costPrice !== undefined) {
           cost = foundInitial.costPrice;
         } else {
-          // Default estimate cost ~ 70% of selling price if not set
           cost = Math.round(p.price * 0.7);
         }
       }
-      return { ...p, costPrice: cost };
+
+      let stock = p.stock;
+      if (stock === undefined || stock === null || isNaN(stock)) {
+        const foundInitial = initialMap.get(p.id);
+        stock = foundInitial?.stock !== undefined ? foundInitial.stock : 25;
+      }
+
+      return {
+        ...p,
+        costPrice: cost,
+        stock: Math.max(0, Math.floor(stock)),
+      };
     });
 
     localStorage.setItem(PRODUCTS_KEY, JSON.stringify(migrated));

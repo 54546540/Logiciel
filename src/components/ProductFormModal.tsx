@@ -10,6 +10,8 @@ import {
   AlertTriangle,
   Camera,
   Coins,
+  Boxes,
+  Plus,
 } from 'lucide-react';
 import { Product, formatPrice, calculateItemProfit } from '../types';
 
@@ -48,6 +50,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [name, setName] = useState('');
   const [price, setPrice] = useState(''); // سعر البيع
   const [costPrice, setCostPrice] = useState(''); // سعر الشراء / التكلفة
+  const [stock, setStock] = useState('20'); // كمية المخزون
   const [category, setCategory] = useState('عام');
   const [barcode, setBarcode] = useState('');
   const [error, setError] = useState('');
@@ -61,12 +64,16 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           ? initialProduct.costPrice.toString()
           : Math.round(initialProduct.price * 0.7).toString()
       );
+      setStock(
+        initialProduct.stock !== undefined ? initialProduct.stock.toString() : '20'
+      );
       setCategory(initialProduct.category || 'عام');
       setBarcode(initialProduct.barcode || '');
     } else {
       setName('');
       setPrice('');
       setCostPrice('');
+      setStock('20');
       setCategory('عام');
       setBarcode(initialBarcode || '');
     }
@@ -78,6 +85,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const numericCost = parseFloat(costPrice) || 0;
   const { profit, marginPercent } = calculateItemProfit(numericPrice, numericCost);
   const isLoss = numericCost > numericPrice && numericPrice > 0;
+
+  const handleAddStock = (amount: number) => {
+    const current = parseInt(stock, 10) || 0;
+    setStock(Math.max(0, current + amount).toString());
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +105,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }
 
     const parsedCost = parseFloat(costPrice);
-    const finalCost = !isNaN(parsedCost) && parsedCost >= 0 ? parsedCost : Math.round(parsedPrice * 0.7);
+    const finalCost =
+      !isNaN(parsedCost) && parsedCost >= 0 ? parsedCost : Math.round(parsedPrice * 0.7);
+
+    const parsedStock = parseInt(stock, 10);
+    const finalStock = !isNaN(parsedStock) && parsedStock >= 0 ? parsedStock : 0;
 
     if (initialProduct) {
       onSave({
@@ -101,6 +117,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         name: name.trim(),
         price: parsedPrice,
         costPrice: finalCost,
+        stock: finalStock,
         category: category.trim() || 'عام',
         barcode: barcode.trim(),
         updatedAt: Date.now(),
@@ -110,6 +127,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         name: name.trim(),
         price: parsedPrice,
         costPrice: finalCost,
+        stock: finalStock,
         category: category.trim() || 'عام',
         barcode: barcode.trim(),
         updatedAt: Date.now(),
@@ -138,7 +156,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 <Tag className="w-4 h-4" />
               </div>
               <h2 className="text-sm sm:text-base font-bold text-white">
-                {initialProduct ? 'تعديل السلعة وحساب الأرباح' : 'إضافة سلعة جديدة مع حساب الربح'}
+                {initialProduct ? 'تعديل السلعة والمخزون' : 'إضافة سلعة ومخزون جديد'}
               </h2>
             </div>
             <button
@@ -178,9 +196,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               />
             </div>
 
-            {/* Price & Cost Grid (The core of profit calculation) */}
+            {/* Price & Cost Grid */}
             <div className="grid grid-cols-2 gap-2.5">
-              {/* Cost Price (سعر الشراء / التكلفة) */}
+              {/* Cost Price */}
               <div className="bg-[#1b1b23] border border-[#2d2d38] rounded-xl p-2.5">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11px] font-bold text-[#a1a1aa] flex items-center gap-1">
@@ -203,10 +221,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                     {currency}
                   </span>
                 </div>
-                <span className="text-[10px] text-[#71717a] mt-1 block">سعر الجملة أو التكلفة</span>
+                <span className="text-[10px] text-[#71717a] mt-1 block">سعر الجملة</span>
               </div>
 
-              {/* Selling Price (سعر إعادة البيع للزبون) */}
+              {/* Selling Price */}
               <div className="bg-[#1f1d18] border border-[#e5c058]/40 rounded-xl p-2.5">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11px] font-bold text-[#f3d57e] flex items-center gap-1">
@@ -274,6 +292,56 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 </div>
               </motion.div>
             )}
+
+            {/* Stock Quantity Section (Automated Decrement on Sales) */}
+            <div className="bg-[#181820] border border-[#2f2f3d] rounded-xl p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Boxes className="w-4 h-4 text-[#e5c058]" />
+                  <span>كمية المخزون المتاحة حالياً</span>
+                </label>
+                <span className="text-[10px] text-emerald-400 font-semibold">
+                  ينقص تلقائياً عند كل بيع
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    id="product-stock-input"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={stock}
+                    onChange={(e) => setStock(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-3 py-2 bg-[#131317] border border-[#393946] rounded-lg text-white font-mono text-base font-bold text-center focus:outline-none focus:border-[#e5c058]"
+                  />
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-[#a1a1aa]">
+                    قطعة
+                  </span>
+                </div>
+
+                {/* Quick Add Presets */}
+                <div className="flex items-center gap-1">
+                  {[5, 10, 20, 50].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => handleAddStock(amt)}
+                      className="px-2 py-1.5 rounded-lg bg-[#252530] hover:bg-[#323242] border border-[#3e3e50] text-[#f3d57e] text-xs font-mono font-semibold transition-colors flex items-center gap-0.5"
+                      title={`زيادة +${amt} للمخزون`}
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      <span>{amt}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[10px] text-[#71717a] mt-1.5">
+                عند إتمام أي طلب بيع كاشير، سيتم خصم العدد المباع مباشرة من هذا الرصيد.
+              </p>
+            </div>
 
             {/* Category selection */}
             <div>
